@@ -120,6 +120,18 @@ class ElfTests(unittest.TestCase):
             mkdeb.readelf = real
 
 
+class VersionTests(unittest.TestCase):
+    def test_debian_version(self):
+        for up, want in (("v1.2.3", "1.2.3"), ("1.2.3", "1.2.3"), ("v0.14.3-rc1", "0.14.3~rc1"),
+                         ("0.14.3-beta.2", "0.14.3~beta.2"), ("v2.0", "2.0"), ("1.2.3~rc1", "1.2.3~rc1")):
+            self.assertEqual(mkdeb.debian_version(up), want, up)
+
+    @unittest.skipUnless(shutil.which("dpkg"), "needs dpkg")
+    def test_prerelease_sorts_before_release(self):
+        pre, rel = mkdeb.debian_version("v0.14.3-rc1") + "-1", mkdeb.debian_version("v0.14.3") + "-1"
+        self.assertEqual(subprocess.run(["dpkg", "--compare-versions", pre, "lt", rel]).returncode, 0)
+
+
 class PolicyAndValidation(unittest.TestCase):
     def script(self, body: str) -> Path:
         d = tempfile.mkdtemp()

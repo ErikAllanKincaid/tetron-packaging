@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unit tests
+        run: python3 -m unittest discover tests
+      - name: reconcile
+        run: python3 reconcile.py > /dev/null
+
+  action:
+    # Runs the action from this checkout on native runners, so the clean-container
+    # install test runs on amd64 and on arm64 without emulation.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-24.04,     arch: amd64 }
+          - { runner: ubuntu-24.04-arm, arch: arm64 }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fixture binary
+        run: cp /bin/true mkdeb-fixture-bin
+      - name: Build and test a deb with the action
+        id: deb
+        uses: ./
+        with:
+          binary: mkdeb-fixture-bin
+          deb-toml: tests/fixtures/deb.toml
+          version: v0.0.1-rc1
+          arch: ${{ matrix.arch }}
+      - name: Check outputs
+        run: |
+          test -f "${{ steps.deb.outputs.deb }}"
+          test -f "${{ steps.deb.outputs.sha256 }}"
+          dpkg-deb -f "${{ steps.deb.outputs.deb }}" Package Version Architecture

@@ -73,3 +73,10 @@ class InstallTest(Requirement):
     list and md5sums, runs the smoke command and the unit file check, and
     verifies remove and purge leave nothing behind. The test fails closed:
     a package that did not install is never reported as cleanly removed."""
+
+
+class PrereleaseVersionOrdering(Requirement):
+    """A hyphenated prerelease suffix in the upstream version (1.2.3-rc1 from
+    a tag such as v1.2.3-rc1) becomes a tilde in the Debian version
+    (1.2.3~rc1-1), so dpkg sorts a prerelease before its final release. A
+    leading v is removed. A plain version is unchanged."""

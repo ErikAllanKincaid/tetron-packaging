@@ -24,3 +24,12 @@ class ConsumerExample(Requirement):
     """The README contains a complete copy-paste example: a deb.toml for a
     binary with a service, and a release.yml job that builds binaries, calls
     the action for each architecture, and uploads the .deb and .sha256."""
+
+
+class ActionSelfTestCi(Requirement):
+    """The repository CI (.github/workflows/ci.yml) runs the unit tests and
+    reconcile on every push and pull request, and exercises the build-deb
+    action itself (uses: ./) on a native amd64 runner and a native arm64
+    runner with a fixture binary, so the install test also runs natively on
+    both architectures. It has no release side effects and needs no
+    secrets."""

@@ -163,6 +163,12 @@ def resolve_epoch(explicit: int | None, anchor: Path, fallback: int | None = Non
     raise MkdebError("no timestamp: pass --epoch, set SOURCE_DATE_EPOCH, or build from a git checkout")
 
 
+def debian_version(upstream: str) -> str:
+    """v1.2.3 -> 1.2.3; v1.2.3-rc1 -> 1.2.3~rc1 (so a prerelease sorts before the release)."""
+    v = upstream.lstrip("v")
+    return re.sub(r"^(\d+(?:\.\d+)*)-(?=[A-Za-z0-9])", r"\1~", v)
+
+
 def control_text(p: dict, version: str, arch: str, maintainer: str, size_kib: int, depends: list[str]) -> str:
     longd = "\n".join(" " + (l if l.strip() else ".") for l in p.get("long_description", "").strip().splitlines())
     fields = [("Package", p["name"]), ("Version", version), ("Architecture", arch), ("Maintainer", maintainer),
@@ -204,7 +210,7 @@ def assemble(p: dict, base: Path, binary: Path, version: str, revision: str, arc
         size_kib = (sum(x.stat().st_size for x in files) + 1023) // 1024
         deb = stage / "DEBIAN"
         deb.mkdir()
-        full_version = f"{version}-{revision}"
+        full_version = f"{debian_version(version)}-{revision}"
         (deb / "control").write_text(control_text(p, full_version, barch, maintainer, size_kib, depends))
         (deb / "md5sums").write_text("".join(
             f"{hashlib.md5(x.read_bytes()).hexdigest()}  {x.relative_to(stage)}\n" for x in files))
@@ -237,7 +243,7 @@ def cmd_build(a: argparse.Namespace) -> None:
     if not maintainer:
         raise MkdebError("maintainer required: deb.toml 'maintainer', --maintainer, or MKDEB_MAINTAINER")
     epoch = resolve_epoch(a.epoch, toml_path.parent)
-    assemble(p, toml_path.parent, Path(a.binary).resolve(), a.version.lstrip("v"), a.revision, a.arch,
+    assemble(p, toml_path.parent, Path(a.binary).resolve(), a.version, a.revision, a.arch,
              maintainer, epoch, Path(a.out))
 
 

@@ -1,0 +1,11 @@
+# Fixture for the CI self-test of the build-deb action.
+name = "mkdeb-fixture"
+description = "mkdeb CI fixture"
+license = "MIT"
+homepage = "https://github.com/ErikAllanKincaid/tetron-packaging"
+maintainer = "CI <ci@example.invalid>"
+
+[[files]]
+src = "binary"
+dst = "usr/bin/mkdeb-fixture"
+mode = "0755"
