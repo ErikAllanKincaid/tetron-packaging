@@ -1,0 +1,67 @@
+name: build-deb
+description: Build a tested .deb for a tetron suite binary with mkdeb
+inputs:
+  binary:
+    description: Path to the compiled binary (ELF, amd64 or arm64)
+    required: true
+  deb-toml:
+    description: Path to the package description (packaging/deb.toml)
+    required: true
+  version:
+    description: Upstream version, for example the release tag (a leading v is removed)
+    required: true
+  revision:
+    description: Debian revision
+    default: "1"
+  arch:
+    description: Expected architecture (amd64 or arm64); checked against the binary. Optional.
+    default: ""
+  maintainer:
+    description: Maintainer field, if not set in deb.toml
+    default: ""
+  out:
+    description: Output directory
+    default: deb-out
+  test:
+    description: Run the clean debian:trixie install test (fails the job on error)
+    default: "true"
+  smoke:
+    description: Smoke command for the install test, for example "tetron --version"
+    default: ""
+outputs:
+  deb:
+    description: Path to the built .deb
+    value: ${{ steps.build.outputs.deb }}
+  sha256:
+    description: Path to the .sha256 file
+    value: ${{ steps.build.outputs.sha256 }}
+runs:
+  using: composite
+  steps:
+    - id: build
+      shell: bash
+      env:
+        IN_BINARY: ${{ inputs.binary }}
+        IN_TOML: ${{ inputs.deb-toml }}
+        IN_VERSION: ${{ inputs.version }}
+        IN_REVISION: ${{ inputs.revision }}
+        IN_ARCH: ${{ inputs.arch }}
+        IN_MAINTAINER: ${{ inputs.maintainer }}
+        IN_OUT: ${{ inputs.out }}
+      run: |
+        set -euo pipefail
+        args=(build --deb-toml "$IN_TOML" --binary "$IN_BINARY" --version "$IN_VERSION" --revision "$IN_REVISION" --out "$IN_OUT")
+        [ -n "$IN_ARCH" ] && args+=(--arch "$IN_ARCH")
+        [ -n "$IN_MAINTAINER" ] && args+=(--maintainer "$IN_MAINTAINER")
+        python3 "${{ github.action_path }}/mkdeb.py" "${args[@]}"
+        deb="$(ls -1 "$IN_OUT"/*.deb | head -1)"
+        echo "deb=$deb" >> "$GITHUB_OUTPUT"
+        echo "sha256=$deb.sha256" >> "$GITHUB_OUTPUT"
+    - if: ${{ inputs.test == 'true' }}
+      shell: bash
+      env:
+        DEB: ${{ steps.build.outputs.deb }}
+        SMOKE: ${{ inputs.smoke }}
+      run: |
+        set -euo pipefail
+        "${{ github.action_path }}/scripts/test-install.sh" "${DEB}::${SMOKE}"
