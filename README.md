@@ -33,6 +33,9 @@ depends = ["iproute2"]                  # added to the computed Depends; a name 
 recommends = []
 conflicts = []
 smoke = "tetron --version"              # used by manifest tests
+# {minor} and {next_minor} expand from the package version: 0.14.2 gives 0.14 and 0.15.
+# Suite addons track the tetron core minor (tetron-tui 0.14.x targets tetron 0.14), so:
+# recommends = ["tetron (>= {minor}), tetron (<< {next_minor})"]
 soname_map = { "libfoo.so.3" = "libfoo3" }
 
 [[files]]

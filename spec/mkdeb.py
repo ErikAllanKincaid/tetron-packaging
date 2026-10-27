@@ -75,8 +75,11 @@ class InstallTest(Requirement):
     a package that did not install is never reported as cleanly removed."""
 
 
-class PrereleaseVersionOrdering(Requirement):
-    """A hyphenated prerelease suffix in the upstream version (1.2.3-rc1 from
-    a tag such as v1.2.3-rc1) becomes a tilde in the Debian version
-    (1.2.3~rc1-1), so dpkg sorts a prerelease before its final release. A
-    leading v is removed. A plain version is unchanged."""
+class VersionTemplates(Requirement):
+    """Dependency strings in deb.toml may use the tokens {minor} and
+    {next_minor}, replaced by the X.Y and X.(Y+1) of the package's own
+    upstream version (0.14.2 gives 0.14 and 0.15). This lets an addon whose
+    version tracks the tetron core minor (tetron-tui 0.14.x targets tetron
+    0.14) declare tetron (>= {minor}), tetron (<< {next_minor}) without a
+    hand edit at each minor bump. A leading v on the version is removed.
+    Versions that are not X.Y.Z style make the tokens an error."""

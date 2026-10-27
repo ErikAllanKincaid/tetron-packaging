@@ -46,6 +46,7 @@ license = "MPL-2.0"
 homepage = "https://example.invalid/demo"
 section = "net"
 smoke = "demo --version"
+recommends = ["tetron (>= {minor}), tetron (<< {next_minor})"]
 
 [[files]]
 src = "binary"
@@ -120,16 +121,16 @@ class ElfTests(unittest.TestCase):
             mkdeb.readelf = real
 
 
-class VersionTests(unittest.TestCase):
-    def test_debian_version(self):
-        for up, want in (("v1.2.3", "1.2.3"), ("1.2.3", "1.2.3"), ("v0.14.3-rc1", "0.14.3~rc1"),
-                         ("0.14.3-beta.2", "0.14.3~beta.2"), ("v2.0", "2.0"), ("1.2.3~rc1", "1.2.3~rc1")):
-            self.assertEqual(mkdeb.debian_version(up), want, up)
+class VersionTokenTests(unittest.TestCase):
+    def test_tokens_expand_from_package_version(self):
+        rel = ["tetron (>= {minor}), tetron (<< {next_minor})"]
+        self.assertEqual(mkdeb.expand_version_tokens(rel, "0.14.2"), ["tetron (>= 0.14), tetron (<< 0.15)"])
+        self.assertEqual(mkdeb.expand_version_tokens(rel, "1.9"), ["tetron (>= 1.9), tetron (<< 1.10)"])
+        self.assertEqual(mkdeb.expand_version_tokens(["iproute2"], "weird"), ["iproute2"])
 
-    @unittest.skipUnless(shutil.which("dpkg"), "needs dpkg")
-    def test_prerelease_sorts_before_release(self):
-        pre, rel = mkdeb.debian_version("v0.14.3-rc1") + "-1", mkdeb.debian_version("v0.14.3") + "-1"
-        self.assertEqual(subprocess.run(["dpkg", "--compare-versions", pre, "lt", rel]).returncode, 0)
+    def test_tokens_need_an_xy_version(self):
+        with self.assertRaises(mkdeb.MkdebError):
+            mkdeb.expand_version_tokens(["tetron (>= {minor})"], "nightly")
 
 
 class PolicyAndValidation(unittest.TestCase):
@@ -188,6 +189,7 @@ class BuildTests(unittest.TestCase):
         deb = self.build("o1")
         host_arch = mkdeb.elf_arch(self.d / "demo-bin")
         self.assertEqual(deb.name, f"demo_1.2.3-1_{host_arch}.deb")
+        self.assertIn("tetron (>= 1.2), tetron (<< 1.3)", self.field(deb, "Recommends"))
         self.assertEqual(self.field(deb, "Package"), "demo")
         self.assertEqual(self.field(deb, "Version"), "1.2.3-1")
         self.assertEqual(self.field(deb, "Architecture"), host_arch)

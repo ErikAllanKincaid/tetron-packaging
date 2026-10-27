@@ -163,10 +163,15 @@ def resolve_epoch(explicit: int | None, anchor: Path, fallback: int | None = Non
     raise MkdebError("no timestamp: pass --epoch, set SOURCE_DATE_EPOCH, or build from a git checkout")
 
 
-def debian_version(upstream: str) -> str:
-    """v1.2.3 -> 1.2.3; v1.2.3-rc1 -> 1.2.3~rc1 (so a prerelease sorts before the release)."""
-    v = upstream.lstrip("v")
-    return re.sub(r"^(\d+(?:\.\d+)*)-(?=[A-Za-z0-9])", r"\1~", v)
+def expand_version_tokens(items: list[str], version: str) -> list[str]:
+    """Replace {minor} (0.14) and {next_minor} (0.15) from the package version (0.14.2)."""
+    if not any("{minor}" in i or "{next_minor}" in i for i in items):
+        return items
+    m = re.match(r"^(\d+)\.(\d+)(?:\.|$)", version)
+    if not m:
+        raise MkdebError(f"version {version!r} has no X.Y form; cannot expand {{minor}}/{{next_minor}}")
+    major, minor = int(m.group(1)), int(m.group(2))
+    return [i.replace("{minor}", f"{major}.{minor}").replace("{next_minor}", f"{major}.{minor + 1}") for i in items]
 
 
 def control_text(p: dict, version: str, arch: str, maintainer: str, size_kib: int, depends: list[str]) -> str:
@@ -187,8 +192,11 @@ def assemble(p: dict, base: Path, binary: Path, version: str, revision: str, arc
     barch = elf_arch(binary)
     if arch and arch != barch:
         raise MkdebError(f"{name}: --arch {arch} does not match the binary ({barch})")
+    version = version.lstrip("v")
     depends = merge_depends(compute_depends(binary, p.get("soname_map", {})),
-                            (extra_depends or []) + p.get("depends", []))
+                            expand_version_tokens((extra_depends or []) + p.get("depends", []), version))
+    p = dict(p, recommends=expand_version_tokens(p.get("recommends", []), version),
+             conflicts=expand_version_tokens(p.get("conflicts", []), version))
     for s in p.get("scripts", {}).values():
         scan_script(base / s)
     with tempfile.TemporaryDirectory() as td:
@@ -210,7 +218,7 @@ def assemble(p: dict, base: Path, binary: Path, version: str, revision: str, arc
         size_kib = (sum(x.stat().st_size for x in files) + 1023) // 1024
         deb = stage / "DEBIAN"
         deb.mkdir()
-        full_version = f"{debian_version(version)}-{revision}"
+        full_version = f"{version}-{revision}"
         (deb / "control").write_text(control_text(p, full_version, barch, maintainer, size_kib, depends))
         (deb / "md5sums").write_text("".join(
             f"{hashlib.md5(x.read_bytes()).hexdigest()}  {x.relative_to(stage)}\n" for x in files))

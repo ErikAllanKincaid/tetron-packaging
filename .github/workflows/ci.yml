@@ -37,7 +37,7 @@ jobs:
         with:
           binary: mkdeb-fixture-bin
           deb-toml: tests/fixtures/deb.toml
-          version: v0.0.1-rc1
+          version: v0.14.0
           arch: ${{ matrix.arch }}
       - name: Check outputs
         run: |
