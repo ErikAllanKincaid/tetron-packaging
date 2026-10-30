@@ -38,9 +38,25 @@ outputs:
 runs:
   using: composite
   steps:
+    # mkdeb needs tomllib (Python 3.11+). Use the runner's python3 when it has
+    # it; otherwise (ubuntu-22.04 images have 3.10) install 3.12 without
+    # touching the caller's PATH or python3.
+    - id: probe
+      shell: bash
+      run: |
+        if command -v python3 >/dev/null 2>&1 && python3 -c 'import tomllib' 2>/dev/null; then
+          echo "python=$(command -v python3)" >> "$GITHUB_OUTPUT"
+        fi
+    - id: setup
+      if: ${{ steps.probe.outputs.python == '' }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+        update-environment: false
     - id: build
       shell: bash
       env:
+        PYTHON: ${{ steps.probe.outputs.python || steps.setup.outputs.python-path }}
         IN_BINARY: ${{ inputs.binary }}
         IN_TOML: ${{ inputs.deb-toml }}
         IN_VERSION: ${{ inputs.version }}
@@ -53,7 +69,7 @@ runs:
         args=(build --deb-toml "$IN_TOML" --binary "$IN_BINARY" --version "$IN_VERSION" --revision "$IN_REVISION" --out "$IN_OUT")
         [ -n "$IN_ARCH" ] && args+=(--arch "$IN_ARCH")
         [ -n "$IN_MAINTAINER" ] && args+=(--maintainer "$IN_MAINTAINER")
-        python3 "${{ github.action_path }}/mkdeb.py" "${args[@]}"
+        "$PYTHON" "${{ github.action_path }}/mkdeb.py" "${args[@]}"
         deb="$(ls -1 "$IN_OUT"/*.deb | head -1)"
         echo "deb=$deb" >> "$GITHUB_OUTPUT"
         echo "sha256=$deb.sha256" >> "$GITHUB_OUTPUT"

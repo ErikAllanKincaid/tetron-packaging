@@ -18,13 +18,17 @@ jobs:
         run: python3 reconcile.py > /dev/null
 
   action:
-    # Runs the action from this checkout on native runners, so the clean-container
-    # install test runs on amd64 and on arm64 without emulation.
+    # Runs the action from this checkout on native 22.04 and 24.04 runners, amd64
+    # and arm64. The 22.04 images have Python 3.10, so both of the action's
+    # Python paths run, and the clean-container install test runs on both
+    # architectures without emulation.
     strategy:
       fail-fast: false
       matrix:
         include:
           - { runner: ubuntu-24.04,     arch: amd64 }
+          - { runner: ubuntu-22.04,     arch: amd64 }
+          - { runner: ubuntu-22.04-arm, arch: arm64 }
           - { runner: ubuntu-24.04-arm, arch: arm64 }
     runs-on: ${{ matrix.runner }}
     steps:
