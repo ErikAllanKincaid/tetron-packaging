@@ -3,8 +3,8 @@ from libspec import Requirement
 
 class CompositeAction(Requirement):
     """action.yml at the repository root is a composite GitHub action named
-    build-deb. Inputs: binary, deb-toml, version, revision, arch, out, test,
-    maintainer. Outputs: deb and sha256 paths. It runs mkdeb from the
+    build-deb. Inputs: binary (empty for a metapackage), deb-toml, version,
+    revision, arch, out, test, maintainer. Outputs: deb and sha256 paths. It runs mkdeb from the
     action's own checkout (github.action_path), so a consumer pinned to a
     commit SHA runs exactly that version of the tool. mkdeb needs Python
     3.11+ (tomllib), and the action does not assume a runner image: it uses

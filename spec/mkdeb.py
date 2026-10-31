@@ -17,16 +17,32 @@ class TwoModes(Requirement):
 class DebTomlFormat(Requirement):
     """A deb.toml describes exactly one package: name, description,
     long_description, section, priority, license, homepage, depends,
-    smoke, files (src or the word binary, dst, mode), and scripts. Paths in
-    it are relative to the file. Unknown keys are an error, so typos do not
-    pass silently."""
+    recommends, suggests, conflicts, smoke, files (src or the word binary,
+    dst, mode), and scripts. Paths in it are relative to the file. Unknown
+    keys are an error, so typos do not pass silently. suggests is written
+    as the Suggests field and takes the same version tokens as depends."""
 
 
 class ArchFromElf(Requirement):
     """The package architecture is read from the binary ELF header
     (x86-64 gives amd64, aarch64 gives arm64). An explicit --arch that
     disagrees with the binary is an error. Unsupported machines are an
-    error."""
+    error. A metapackage has no binary and is Architecture: all."""
+
+
+class Metapackage(Requirement):
+    """A deb.toml with no files entry whose src is binary (or asset) is a
+    metapackage: no binary is passed (--binary is then an error, and
+    missing --binary for a package that has one is an error), the
+    architecture is all, Depends are only those declared, and files may be
+    empty (the generated copyright file is still included). Empty files
+    without any depends, recommends or suggests is an error, since that is
+    more likely a package whose files were left out. It exists so a
+    suite package such as tetron-wm-desktop can pull in the core package and
+    recommended tools through Depends, Recommends and Suggests. Output is
+    byte-reproducible like any other package. In manifest mode a metapackage
+    needs no source and its arch must be all. The build-deb action makes
+    its binary input optional for the same case."""
 
 
 class DependsFromBinary(Requirement):
