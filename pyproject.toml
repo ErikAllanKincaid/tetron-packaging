@@ -1,0 +1,16 @@
+[project]
+name = "tetron-packaging"
+version = "0.1.0"
+description = "mkdeb and the build-deb action. The project file exists only for the spec tooling; mkdeb.py itself is standard library only."
+requires-python = ">=3.13"
+dependencies = []
+
+[dependency-groups]
+# Development only: `uv run libspec diff` reviews spec/ changes (spec-first workflow).
+dev = ["libspec"]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+libspec = { git = "https://github.com/drhodes/libspec", tag = "v10.3.1" }

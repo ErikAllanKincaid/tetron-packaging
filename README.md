@@ -128,3 +128,15 @@ Timestamps come from `--epoch`, then `SOURCE_DATE_EPOCH`, then the manifest `sou
 ## License
 
 Not chosen yet.
+
+## Development
+
+mkdeb is standard library only; the project file exists for the spec tooling. Requirements live in `spec/` (libspec). Workflow: edit the spec, review it, write tests, implement, then `python3 reconcile.py` must pass.
+
+    uv run libspec diff              # live spec/ against HEAD
+    uv run libspec diff A B          # spec changes between two commits
+    uv run libspec log               # commits that changed the spec
+    python3 -m unittest discover tests
+    python3 reconcile.py
+
+libspec is pinned in `pyproject.toml` (a development-only dependency group) and `uv.lock`; `uv run` creates `.venv` on first use.
