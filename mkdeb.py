@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """mkdeb: build .deb packages for the tetron suite. Stdlib + dpkg-deb + readelf only.
 
-  mkdeb.py build    --deb-toml FILE --binary FILE --version V [--revision 1] [--arch A]
+  mkdeb.py build    --deb-toml FILE [--binary FILE] --version V [--revision 1] [--arch A]
                     [--maintainer M] [--epoch N] [--out DIR]
   mkdeb.py manifest --manifest FILE [--only NAME] [--out DIR] [--cache DIR]
   mkdeb.py list-tests --manifest FILE
@@ -31,7 +31,8 @@ LIBC_SONAMES = re.compile(r"^(libc\.so\.6|libm\.so\.6|libdl\.so\.2|libpthread\.s
 SONAME_PKGS = {"libgcc_s.so.1": "libgcc-s1", "libstdc++.so.6": "libstdc++6", "libz.so.1": "zlib1g"}
 
 PKG_KEYS = {"name", "description", "long_description", "section", "priority", "license", "homepage",
-            "maintainer", "depends", "recommends", "conflicts", "smoke", "soname_map", "files", "scripts"}
+            "maintainer", "depends", "recommends", "suggests", "conflicts", "smoke", "soname_map", "files",
+            "scripts"}
 MANIFEST_PKG_KEYS = PKG_KEYS | {"version", "revision", "arch", "source"}
 SCRIPT_NAMES = {"preinst", "postinst", "prerm", "postrm"}
 FILE_KEYS = {"src", "dst", "mode"}
@@ -115,9 +116,14 @@ def check_keys(d: dict, allowed: set[str], where: str) -> None:
 
 def validate_pkg(p: dict, where: str, allowed: set[str]) -> None:
     check_keys(p, allowed, where)
-    for k in ("name", "description", "license", "files"):
+    for k in ("name", "description", "license"):
         if not p.get(k):
             raise MkdebError(f"{where}: missing required key '{k}'")
+    # Empty files is a metapackage, which only makes sense with relations;
+    # otherwise it is most likely a package whose files were left out.
+    relations = any(p.get(k) for k in ("depends", "recommends", "suggests"))
+    if "files" not in p or (not p["files"] and not relations):
+        raise MkdebError(f"{where}: missing required key 'files' (a metapackage needs depends, recommends or suggests)")
     for f in p["files"]:
         check_keys(f, FILE_KEYS, f"{where} files")
         for k in FILE_KEYS:
@@ -128,6 +134,11 @@ def validate_pkg(p: dict, where: str, allowed: set[str]) -> None:
     bad = set(p.get("scripts", {})) - SCRIPT_NAMES
     if bad:
         raise MkdebError(f"{where}: unknown script(s): {', '.join(sorted(bad))}")
+
+
+def is_metapackage(p: dict) -> bool:
+    """No file comes from the binary: Architecture all, nothing computed."""
+    return not any(f.get("src") in ("binary", "asset") for f in p.get("files", []))
 
 
 def scan_script(path: Path) -> None:
@@ -178,24 +189,32 @@ def control_text(p: dict, version: str, arch: str, maintainer: str, size_kib: in
     longd = "\n".join(" " + (l if l.strip() else ".") for l in p.get("long_description", "").strip().splitlines())
     fields = [("Package", p["name"]), ("Version", version), ("Architecture", arch), ("Maintainer", maintainer),
               ("Installed-Size", str(size_kib)), ("Depends", ", ".join(depends)),
-              ("Recommends", ", ".join(p.get("recommends", []))), ("Conflicts", ", ".join(p.get("conflicts", []))),
+              ("Recommends", ", ".join(p.get("recommends", []))), ("Suggests", ", ".join(p.get("suggests", []))),
+              ("Conflicts", ", ".join(p.get("conflicts", []))),
               ("Section", p.get("section", "misc")), ("Priority", p.get("priority", "optional")),
               ("Homepage", p.get("homepage", ""))]
     out = "".join(f"{k}: {v}\n" for k, v in fields if v)
     return out + f"Description: {p['description']}\n" + (longd + "\n" if longd else "")
 
 
-def assemble(p: dict, base: Path, binary: Path, version: str, revision: str, arch: str | None,
+def assemble(p: dict, base: Path, binary: Path | None, version: str, revision: str, arch: str | None,
              maintainer: str, epoch: int, out: Path, extra_depends: list[str] | None = None) -> Path:
-    """Build one .deb. `base` is the directory deb.toml paths are relative to."""
+    """Build one .deb. `base` is the directory deb.toml paths are relative to.
+    `binary` is None for a metapackage (no file from the binary)."""
     name = p["name"]
-    barch = elf_arch(binary)
+    meta = is_metapackage(p)
+    if meta and binary is not None:
+        raise MkdebError(f"{name}: a metapackage (no files entry with src = \"binary\") takes no binary")
+    if not meta and binary is None:
+        raise MkdebError(f"{name}: --binary is required (a files entry has src = \"binary\")")
+    barch = "all" if meta else elf_arch(binary)
     if arch and arch != barch:
-        raise MkdebError(f"{name}: --arch {arch} does not match the binary ({barch})")
+        raise MkdebError(f"{name}: --arch {arch} does not match the package ({barch})")
     version = version.lstrip("v")
-    depends = merge_depends(compute_depends(binary, p.get("soname_map", {})),
-                            expand_version_tokens((extra_depends or []) + p.get("depends", []), version))
+    computed = [] if meta else compute_depends(binary, p.get("soname_map", {}))
+    depends = merge_depends(computed, expand_version_tokens((extra_depends or []) + p.get("depends", []), version))
     p = dict(p, recommends=expand_version_tokens(p.get("recommends", []), version),
+             suggests=expand_version_tokens(p.get("suggests", []), version),
              conflicts=expand_version_tokens(p.get("conflicts", []), version))
     for s in p.get("scripts", {}).values():
         scan_script(base / s)
@@ -251,8 +270,8 @@ def cmd_build(a: argparse.Namespace) -> None:
     if not maintainer:
         raise MkdebError("maintainer required: deb.toml 'maintainer', --maintainer, or MKDEB_MAINTAINER")
     epoch = resolve_epoch(a.epoch, toml_path.parent)
-    assemble(p, toml_path.parent, Path(a.binary).resolve(), a.version, a.revision, a.arch,
-             maintainer, epoch, Path(a.out))
+    binary = Path(a.binary).resolve() if a.binary else None
+    assemble(p, toml_path.parent, binary, a.version, a.revision, a.arch, maintainer, epoch, Path(a.out))
 
 
 # ---- manifest mode ----------------------------------------------------------
@@ -309,9 +328,12 @@ def load_manifest(path: Path) -> dict:
     check_keys(m, {"source_date_epoch", "maintainer", "package"}, str(path))
     for p in m.get("package", []):
         validate_pkg(p, f"{path}: package {p.get('name', '?')}", MANIFEST_PKG_KEYS)
-        for k in ("version", "revision", "arch", "source"):
+        meta = is_metapackage(p)
+        for k in ("version", "revision", "arch") + (() if meta else ("source",)):
             if k not in p:
                 raise MkdebError(f"{path}: package {p['name']} missing '{k}'")
+        if meta and p["arch"] != "all":
+            raise MkdebError(f"{path}: package {p['name']} is a metapackage, so arch must be \"all\"")
     return m
 
 
@@ -328,7 +350,7 @@ def cmd_manifest(a: argparse.Namespace) -> None:
     cache = Path(a.cache) if a.cache else mpath.parent / "cache"
     for p in pkgs:
         print(f"{p['name']} {p['version']}-{p['revision']}")
-        binary = get_asset(p, cache)
+        binary = None if is_metapackage(p) else get_asset(p, cache)
         assemble(p, mpath.parent, binary, p["version"], p["revision"], p["arch"], maintainer, epoch, Path(a.out))
 
 
@@ -343,7 +365,7 @@ def main(argv: list[str] | None = None) -> None:
     sub = ap.add_subparsers(dest="cmd", required=True)
     b = sub.add_parser("build", help="package a local binary using a deb.toml")
     b.add_argument("--deb-toml", required=True)
-    b.add_argument("--binary", required=True)
+    b.add_argument("--binary", help="the binary; omit for a metapackage")
     b.add_argument("--version", required=True)
     b.add_argument("--revision", default="1")
     b.add_argument("--arch")

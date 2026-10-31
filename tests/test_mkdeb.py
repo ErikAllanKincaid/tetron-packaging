@@ -63,6 +63,17 @@ postinst = "postinst"
 """
 
 
+META_TOML = """
+name = "demo-desktop"
+description = "Demo desktop"
+license = "MPL-2.0"
+depends = ["demo (>= 1.2.3)"]
+recommends = ["chafa", "w3m"]
+suggests = ["tetron (>= {minor})"]
+files = []
+"""
+
+
 class ElfTests(unittest.TestCase):
     def write(self, data: bytes) -> Path:
         d = tempfile.mkdtemp()
@@ -225,6 +236,66 @@ class BuildTests(unittest.TestCase):
                 "--version", "1", "--epoch", str(EPOCH), "--out", str(self.d / "o5")]
         with self.assertRaises(SystemExit):
             mkdeb.main(argv)
+
+    def test_suggests_field_with_tokens(self):
+        (self.d / "deb.toml").write_text(TOML.replace('smoke = "demo --version"',
+                                                      'smoke = "demo --version"\nsuggests = ["chafa", "tetron-tui (>= {minor})"]'))
+        deb = self.build("o6")
+        self.assertEqual(self.field(deb, "Suggests"), "chafa, tetron-tui (>= 1.2)")
+
+    def test_no_suggests_means_no_field(self):
+        self.assertEqual(self.field(self.build("o7"), "Suggests"), "")
+
+    def meta(self, out: str, extra: list[str] | None = None) -> Path:
+        argv = ["build", "--deb-toml", str(self.d / "meta.toml"), "--version", "v1.2.3",
+                "--maintainer", "T <t@example.invalid>", "--epoch", str(EPOCH), "--out", str(self.d / out)]
+        mkdeb.main(argv + (extra or []))
+        return next((self.d / out).glob("*.deb"))
+
+    def test_metapackage_has_no_binary_and_is_arch_all(self):
+        (self.d / "meta.toml").write_text(META_TOML)
+        deb = self.meta("m1")
+        self.assertEqual(deb.name, "demo-desktop_1.2.3-1_all.deb")
+        self.assertEqual(self.field(deb, "Architecture"), "all")
+        self.assertEqual(self.field(deb, "Depends"), "demo (>= 1.2.3)", "only the declared Depends, nothing computed")
+        self.assertEqual(self.field(deb, "Recommends"), "chafa, w3m")
+        self.assertEqual(self.field(deb, "Suggests"), "tetron (>= 1.2)")
+        listing = subprocess.run(["dpkg-deb", "-c", str(deb)], capture_output=True, text=True).stdout
+        self.assertIn("./usr/share/doc/demo-desktop/copyright", listing)
+        self.assertNotIn("./usr/bin", listing)
+        self.assertEqual(deb.read_bytes(), self.meta("m2").read_bytes(), "reproducible")
+
+    def test_metapackage_rejects_a_binary_and_a_non_all_arch(self):
+        (self.d / "meta.toml").write_text(META_TOML)
+        with self.assertRaises(SystemExit):
+            self.meta("m3", ["--binary", str(self.d / "demo-bin")])
+        with self.assertRaises(SystemExit):
+            self.meta("m4", ["--arch", "amd64"])
+
+    def test_package_with_a_binary_entry_needs_binary(self):
+        argv = ["build", "--deb-toml", str(self.d / "deb.toml"), "--version", "1", "--maintainer", "T <t@e.invalid>",
+                "--epoch", str(EPOCH), "--out", str(self.d / "o8")]
+        with self.assertRaises(SystemExit):
+            mkdeb.main(argv)
+
+    def test_files_may_be_empty_only_for_a_metapackage(self):
+        ok = {"name": "m", "description": "d", "license": "MIT", "files": [], "recommends": ["chafa"]}
+        mkdeb.validate_pkg(ok, "t", mkdeb.PKG_KEYS)
+        with self.assertRaises(mkdeb.MkdebError):
+            mkdeb.validate_pkg({k: v for k, v in ok.items() if k != "files"}, "t", mkdeb.PKG_KEYS)
+        with self.assertRaises(mkdeb.MkdebError, msg="no files and no relations is a mistake, not a metapackage"):
+            mkdeb.validate_pkg({k: v for k, v in ok.items() if k != "recommends"}, "t", mkdeb.PKG_KEYS)
+
+    def test_manifest_metapackage_needs_no_source_but_arch_all(self):
+        base = 'maintainer = "T <t@e.invalid>"\nsource_date_epoch = %d\n[[package]]\nname = "m"\n' \
+               'description = "d"\nlicense = "MIT"\nfiles = []\nversion = "1.0.0"\nrevision = "1"\n' % EPOCH
+        (self.d / "m.toml").write_text(base + 'arch = "all"\ndepends = ["demo"]\n')
+        mkdeb.main(["manifest", "--manifest", str(self.d / "m.toml"), "--out", str(self.d / "mm")])
+        deb = next((self.d / "mm").glob("*.deb"))
+        self.assertEqual(deb.name, "m_1.0.0-1_all.deb")
+        (self.d / "m.toml").write_text(base + 'arch = "amd64"\n')
+        with self.assertRaises(SystemExit):
+            mkdeb.main(["manifest", "--manifest", str(self.d / "m.toml"), "--out", str(self.d / "mm2")])
 
     def test_manifest_mode_with_checksum_and_tar_extract(self):
         assets = self.d / "assets"

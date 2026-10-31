@@ -2,8 +2,9 @@ name: build-deb
 description: Build a tested .deb for a tetron suite binary with mkdeb
 inputs:
   binary:
-    description: Path to the compiled binary (ELF, amd64 or arm64)
-    required: true
+    description: Path to the compiled binary (ELF, amd64 or arm64). Leave empty for a metapackage (deb.toml without a src = "binary" file).
+    required: false
+    default: ""
   deb-toml:
     description: Path to the package description (packaging/deb.toml)
     required: true
@@ -66,7 +67,8 @@ runs:
         IN_OUT: ${{ inputs.out }}
       run: |
         set -euo pipefail
-        args=(build --deb-toml "$IN_TOML" --binary "$IN_BINARY" --version "$IN_VERSION" --revision "$IN_REVISION" --out "$IN_OUT")
+        args=(build --deb-toml "$IN_TOML" --version "$IN_VERSION" --revision "$IN_REVISION" --out "$IN_OUT")
+        [ -n "$IN_BINARY" ] && args+=(--binary "$IN_BINARY")
         [ -n "$IN_ARCH" ] && args+=(--arch "$IN_ARCH")
         [ -n "$IN_MAINTAINER" ] && args+=(--maintainer "$IN_MAINTAINER")
         "$PYTHON" "${{ github.action_path }}/mkdeb.py" "${args[@]}"

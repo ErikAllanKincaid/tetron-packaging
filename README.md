@@ -31,6 +31,7 @@ homepage = "https://github.com/ErikAllanKincaid/tetron"
 maintainer = "Name <address>"          # or --maintainer, or MKDEB_MAINTAINER
 depends = ["iproute2"]                  # added to the computed Depends; a name given here wins
 recommends = []
+suggests = []                           # written as Suggests; takes the same {minor} tokens
 conflicts = []
 smoke = "tetron --version"              # used by manifest tests
 # {minor} and {next_minor} expand from the package version: 0.14.2 gives 0.14 and 0.15.
@@ -51,6 +52,22 @@ mode = "0644"
 [scripts]                               # preinst, postinst, prerm, postrm
 postinst = "packaging/postinst"
 ```
+
+## Metapackages
+
+A deb.toml with no `[[files]]` entry whose `src` is `binary` builds a metapackage: no binary is passed (`--binary` is then an error), the architecture is `all`, and `Depends` are only the declared ones. `files` may be an empty list, but then at least one of `depends`, `recommends` or `suggests` is required. In a manifest, a metapackage needs no `source` and its `arch` must be `"all"`. In the action, leave `binary` empty.
+
+```toml
+name = "tetron-wm-desktop"
+description = "tetron-wm with the recommended desktop tools"
+license = "MPL-2.0"
+depends = ["tetron-wm (>= {minor})"]
+recommends = ["chafa", "w3m"]
+suggests = ["mpv"]
+files = []
+```
+
+    python3 mkdeb.py build --deb-toml packaging/deb-desktop.toml --version 0.15.0
 
 ## Use from a release workflow
 
