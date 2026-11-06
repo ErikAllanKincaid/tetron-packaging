@@ -2,7 +2,7 @@
 name = "mkdeb-fixture"
 description = "mkdeb CI fixture"
 license = "MIT"
-homepage = "https://github.com/ErikAllanKincaid/tetron-packaging"
+homepage = "https://github.com/tetronos/tetron-packaging"
 maintainer = "CI <ci@example.invalid>"
 
 [[files]]
