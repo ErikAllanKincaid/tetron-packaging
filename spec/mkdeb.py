@@ -51,7 +51,9 @@ class DependsFromBinary(Requirement):
     highest GLIBC_ symbol version it requires, and known sonames map to
     Debian packages (libgcc_s.so.1 to libgcc-s1, libstdc++.so.6 to
     libstdc++6). An unknown NEEDED soname is an error unless deb.toml maps it
-    in soname_map. Depends from deb.toml are added."""
+    in soname_map. A soname mapped to an empty string is a library the
+    package ships itself (a bundled runtime such as Chromium's): it adds no
+    dependency. Depends from deb.toml are added."""
 
 
 class Deterministic(Requirement):
@@ -80,7 +82,10 @@ class MetadataComplete(Requirement):
     revision), Architecture, Maintainer, Installed-Size, Depends, Section,
     Priority, Homepage and a short and long Description. Maintainer comes
     from deb.toml, --maintainer or the environment, and is required. A
-    copyright file naming the license is generated. md5sums is generated."""
+    copyright file naming the license is generated, unless a files entry
+    installs usr/share/doc/<name>/copyright itself: that file is kept (a
+    license such as BSD-3-Clause needs its full text shipped with
+    binaries). md5sums is generated."""
 
 
 class InstallTest(Requirement):
