@@ -123,6 +123,16 @@ class ElfTests(unittest.TestCase):
         finally:
             mkdeb.readelf = real
 
+    def test_soname_mapped_to_empty_is_bundled(self):
+        text = READELF_D + " 0x0000000000000001 (NEEDED)             Shared library: [libbundled.so]\n"
+        real = mkdeb.readelf
+        mkdeb.readelf = lambda args, path: text if args == ["-d"] else READELF_V
+        try:
+            self.assertEqual(mkdeb.compute_depends(Path("x"), {"libbundled.so": ""}),
+                             ["libc6 (>= 2.34)", "libgcc-s1"])
+        finally:
+            mkdeb.readelf = real
+
     def test_static_binary_has_no_libc_depends(self):
         real = mkdeb.readelf
         mkdeb.readelf = lambda args, path: "There is no dynamic section in this file.\n"
@@ -195,6 +205,15 @@ class BuildTests(unittest.TestCase):
 
     def field(self, deb: Path, f: str) -> str:
         return subprocess.run(["dpkg-deb", "-f", str(deb), f], capture_output=True, text=True).stdout.strip()
+
+    def test_packaged_copyright_is_kept(self):
+        (self.d / "COPYRIGHT").write_text("Full license text\n")
+        (self.d / "deb.toml").write_text(TOML + '\n[[files]]\nsrc = "COPYRIGHT"\n'
+                                         'dst = "usr/share/doc/demo/copyright"\nmode = "0644"\n')
+        deb = self.build("oc")
+        x = self.d / "x"
+        subprocess.run(["dpkg-deb", "-x", str(deb), str(x)], check=True)
+        self.assertEqual((x / "usr/share/doc/demo/copyright").read_text(), "Full license text\n")
 
     def test_build_fields_and_listing(self):
         deb = self.build("o1")

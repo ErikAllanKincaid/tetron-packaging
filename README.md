@@ -11,9 +11,10 @@ Status: developed locally, not yet published. Spec in `spec/` (libspec), checked
 ## What mkdeb does
 
 - Reads the architecture from the binary (amd64 or arm64). A mismatching `--arch` is an error.
-- Computes `Depends` from the binary: none for a static binary, `libc6 (>= X)` from the highest `GLIBC_` symbol for a dynamic one, `libgcc-s1` and `libstdc++6` for those sonames. An unknown shared library is an error until it is mapped in `[soname_map]`.
+- Computes `Depends` from the binary: none for a static binary, `libc6 (>= X)` from the highest `GLIBC_` symbol for a dynamic one, `libgcc-s1` and `libstdc++6` for those sonames. An unknown shared library is an error until it is mapped in `[soname_map]`; map it to `""` when the package ships that library itself (a bundled runtime).
 - Produces a byte-identical package for identical inputs: root ownership, timestamps clamped to an epoch, xz compression.
 - Writes `name_version-revision_arch.deb` and a `.sha256` next to it.
+- Writes `usr/share/doc/<name>/copyright` naming the license, unless a `[[files]]` entry installs that file itself (for licenses such as BSD-3-Clause whose full text must ship with binaries).
 - Refuses maintainer scripts that start or enable services, or use `addgroup` or `adduser`. Services are installed disabled. Create groups with `groupadd --system`. Never create keys or identities in a package script.
 
 ## deb.toml
@@ -37,7 +38,7 @@ smoke = "tetron --version"              # used by manifest tests
 # {minor} and {next_minor} expand from the package version: 0.14.2 gives 0.14 and 0.15.
 # Suite addons track the tetron core minor (tetron-tui 0.14.x targets tetron 0.14), so:
 # recommends = ["tetron (>= {minor}), tetron (<< {next_minor})"]
-soname_map = { "libfoo.so.3" = "libfoo3" }
+soname_map = { "libfoo.so.3" = "libfoo3", "libbundled.so" = "" }
 
 [[files]]
 src = "binary"                          # the binary passed to mkdeb (alias: asset)

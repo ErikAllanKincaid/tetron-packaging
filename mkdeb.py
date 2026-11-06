@@ -87,7 +87,8 @@ def compute_depends(binary: Path, soname_map: dict[str, str]) -> list[str]:
         if LIBC_SONAMES.match(so):
             uses_libc = True
         elif so in soname_map:
-            deps.append(soname_map[so])
+            if soname_map[so]:  # "" = shipped in this package: no dependency
+                deps.append(soname_map[so])
         elif so in SONAME_PKGS:
             deps.append(SONAME_PKGS[so])
         else:
@@ -229,10 +230,11 @@ def assemble(p: dict, base: Path, binary: Path | None, version: str, revision: s
             shutil.copyfile(src, dst)
             dst.chmod(int(f["mode"], 8))
         lic = stage / "usr/share/doc" / name / "copyright"
-        lic.parent.mkdir(parents=True, exist_ok=True)
-        lic.write_text(f"Upstream: {p.get('homepage', '')}\nLicense: {p['license']}\n"
-                       f"See /usr/share/common-licenses/ for common license texts.\n")
-        lic.chmod(0o644)
+        if not lic.exists():  # a package may ship its full license text
+            lic.parent.mkdir(parents=True, exist_ok=True)
+            lic.write_text(f"Upstream: {p.get('homepage', '')}\nLicense: {p['license']}\n"
+                           f"See /usr/share/common-licenses/ for common license texts.\n")
+            lic.chmod(0o644)
         files = sorted(x for x in stage.rglob("*") if x.is_file())
         size_kib = (sum(x.stat().st_size for x in files) + 1023) // 1024
         deb = stage / "DEBIAN"
