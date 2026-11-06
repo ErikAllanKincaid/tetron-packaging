@@ -28,7 +28,7 @@ long_description = """
 Paragraphs of text. A blank line becomes a Debian paragraph break."""
 section = "net"
 license = "MPL-2.0"
-homepage = "https://github.com/ErikAllanKincaid/tetron"
+homepage = "https://github.com/tetronos/tetron"
 maintainer = "Name <address>"          # or --maintainer, or MKDEB_MAINTAINER
 depends = ["iproute2"]                  # added to the computed Depends; a name given here wins
 recommends = []
@@ -90,7 +90,7 @@ Pin the action by full commit SHA, never by branch or tag.
       - uses: actions/download-artifact@v4
         with: { name: "${{ matrix.artifact }}", path: bin }
       - id: deb
-        uses: ErikAllanKincaid/tetron-packaging@<FULL_COMMIT_SHA>
+        uses: tetronos/tetron-packaging@<FULL_COMMIT_SHA>
         with:
           binary: bin/${{ matrix.artifact }}
           deb-toml: packaging/deb.toml
