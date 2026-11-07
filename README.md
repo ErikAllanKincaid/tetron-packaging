@@ -54,6 +54,8 @@ mode = "0644"
 postinst = "packaging/postinst"
 ```
 
+A `[[files]]` entry whose `src` is a directory ships every regular file under it at the same relative path under `dst`, with the entry's `mode` (for example a bundled Python library tree in `usr/lib/<name>`). `__pycache__` and `.pyc` files are left out so the package stays reproducible; a symlink inside the directory is an error. A package with only such entries and plain files is `Architecture: all`, like a metapackage.
+
 ## Metapackages
 
 A deb.toml with no `[[files]]` entry whose `src` is `binary` builds a metapackage: no binary is passed (`--binary` is then an error), the architecture is `all`, and `Depends` are only the declared ones. `files` may be an empty list, but then at least one of `depends`, `recommends` or `suggests` is required. In a manifest, a metapackage needs no `source` and its `arch` must be `"all"`. In the action, leave `binary` empty.

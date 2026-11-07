@@ -284,6 +284,36 @@ class BuildTests(unittest.TestCase):
         self.assertNotIn("./usr/bin", listing)
         self.assertEqual(deb.read_bytes(), self.meta("m2").read_bytes(), "reproducible")
 
+    def test_directory_src_ships_the_tree_arch_all(self):
+        lib = self.d / "bundle"
+        (lib / "pkg" / "sub").mkdir(parents=True)
+        (lib / "pkg" / "__init__.py").write_text("")
+        (lib / "pkg" / "sub" / "mod.py").write_text("x = 1\n")
+        (lib / "pkg" / "__pycache__").mkdir()
+        (lib / "pkg" / "__pycache__" / "mod.cpython-313.pyc").write_bytes(b"\0")
+        (self.d / "wrapper").write_text("#!/bin/sh\nexit 0\n")
+        (self.d / "tree.toml").write_text(
+            'name = "demo-py"\ndescription = "Demo Python app"\nlicense = "MIT"\ndepends = ["python3 (>= 3.11)"]\n'
+            '[[files]]\nsrc = "bundle"\ndst = "usr/lib/demo-py"\nmode = "0644"\n'
+            '[[files]]\nsrc = "wrapper"\ndst = "usr/bin/demo-py"\nmode = "0755"\n')
+        argv = ["build", "--deb-toml", str(self.d / "tree.toml"), "--version", "v1.2.3",
+                "--maintainer", "T <t@example.invalid>", "--epoch", str(EPOCH)]
+        mkdeb.main(argv + ["--out", str(self.d / "t1")])
+        deb = next((self.d / "t1").glob("*.deb"))
+        self.assertEqual(deb.name, "demo-py_1.2.3-1_all.deb")
+        self.assertEqual(self.field(deb, "Depends"), "python3 (>= 3.11)")
+        listing = subprocess.run(["dpkg-deb", "-c", str(deb)], capture_output=True, text=True).stdout
+        self.assertIn("./usr/lib/demo-py/pkg/__init__.py", listing)
+        self.assertIn("./usr/lib/demo-py/pkg/sub/mod.py", listing)
+        self.assertNotIn("__pycache__", listing)
+        self.assertRegex(listing, r"-rw-r--r-- root/root .*\./usr/lib/demo-py/pkg/sub/mod\.py")
+        self.assertRegex(listing, r"-rwxr-xr-x root/root .*\./usr/bin/demo-py")
+        mkdeb.main(argv + ["--out", str(self.d / "t2")])
+        self.assertEqual(deb.read_bytes(), next((self.d / "t2").glob("*.deb")).read_bytes(), "reproducible")
+        (lib / "pkg" / "link").symlink_to("/etc/passwd")
+        with self.assertRaises(SystemExit):
+            mkdeb.main(argv + ["--out", str(self.d / "t3")])
+
     def test_metapackage_rejects_a_binary_and_a_non_all_arch(self):
         (self.d / "meta.toml").write_text(META_TOML)
         with self.assertRaises(SystemExit):
