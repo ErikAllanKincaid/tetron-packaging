@@ -223,6 +223,21 @@ def assemble(p: dict, base: Path, binary: Path | None, version: str, revision: s
         stage = Path(td) / "stage"
         for f in p["files"]:
             src = binary if f["src"] in ("binary", "asset") else base / f["src"]
+            if f["src"] not in ("binary", "asset") and src.is_dir():
+                # A directory: every regular file under it, at the same relative path under dst, with
+                # the entry's mode (e.g. a bundled Python library tree). Python caches are left out so
+                # the package stays reproducible; a symlink is an error (it could point outside).
+                for s in sorted(src.rglob("*")):
+                    if "__pycache__" in s.parts or s.suffix == ".pyc":
+                        continue
+                    if s.is_symlink():
+                        raise MkdebError(f"{name}: symlink in directory {f['src']}: {s.relative_to(src)}")
+                    if s.is_file():
+                        dst = stage / f["dst"] / s.relative_to(src)
+                        dst.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copyfile(s, dst)
+                        dst.chmod(int(f["mode"], 8))
+                continue
             if not src.is_file():
                 raise MkdebError(f"{name}: missing file {src}")
             dst = stage / f["dst"]
